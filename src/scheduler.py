@@ -61,3 +61,18 @@ def liu_layland_bound(n):
     if type(n) is not int or n <= 0:
         raise ValueError("Число задач должно быть положительным целым числом.")
     return n * (2 ** (1 / n) - 1)
+
+
+def rms_schedulable(tasks):
+    """Достаточный тест Лю-Лейланда; None означает неприменимость теста."""
+    validate_tasks(tasks)
+    if any(task.D != task.T for task in tasks):
+        return None
+    return utilization(tasks) <= liu_layland_bound(len(tasks))
+
+
+def edf_schedulable(tasks):
+    validate_tasks(tasks)
+    if any(task.D != task.T for task in tasks):
+        return None
+    return sum((Fraction(task.C, task.T) for task in tasks), Fraction(0)) <= 1
