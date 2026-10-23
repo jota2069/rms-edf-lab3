@@ -4,6 +4,9 @@ from fractions import Fraction
 from pathlib import Path
 
 
+MAX_ITERATIONS = 10000
+
+
 @dataclass(frozen=True)
 class Task:
     name: str
@@ -76,3 +79,19 @@ def edf_schedulable(tasks):
     if any(task.D != task.T for task in tasks):
         return None
     return sum((Fraction(task.C, task.T) for task in tasks), Fraction(0)) <= 1
+
+
+def response_time(task, higher):
+    """Возвращает (оценка, стабилизировалась). B=0, независимые задачи, D<=T."""
+    higher = list(higher)
+    validate_tasks([task] + higher)
+    estimate = task.C
+    for _ in range(MAX_ITERATIONS):
+        # Целочисленное округление вверх не теряет точность на больших числах.
+        next_estimate = task.C + sum(
+            ((estimate + other.T - 1) // other.T) * other.C for other in higher
+        )
+        if next_estimate == estimate:
+            return estimate, True
+        estimate = next_estimate
+    raise ValueError("RTA: достигнут предел итераций, результат не определён.")
