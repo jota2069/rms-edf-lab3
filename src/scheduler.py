@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from fractions import Fraction
 from pathlib import Path
 
 
@@ -43,3 +44,20 @@ def load_tasks(path):
         tasks.append(Task(**item))
     validate_tasks(tasks)
     return tasks
+
+
+def rms_priorities(tasks):
+    validate_tasks(tasks)
+    # При равных периодах сохраняем порядок задач из файла.
+    return sorted(tasks, key=lambda task: task.T)
+
+
+def utilization(tasks):
+    validate_tasks(tasks)
+    return float(sum((Fraction(task.C, task.T) for task in tasks), Fraction(0)))
+
+
+def liu_layland_bound(n):
+    if type(n) is not int or n <= 0:
+        raise ValueError("Число задач должно быть положительным целым числом.")
+    return n * (2 ** (1 / n) - 1)
