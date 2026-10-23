@@ -1,10 +1,12 @@
 import json
 from dataclasses import dataclass
 from fractions import Fraction
+from math import lcm
 from pathlib import Path
 
 
 MAX_ITERATIONS = 10000
+MAX_INTERVAL = 100000
 
 
 @dataclass(frozen=True)
@@ -103,3 +105,35 @@ def response_time(task, higher):
             return next_estimate, False
         estimate = next_estimate
     raise ValueError("RTA: достигнут предел итераций, результат не определён.")
+
+
+def hyperperiod(tasks):
+    validate_tasks(tasks)
+    return lcm(*(task.T for task in tasks))
+
+
+def gantt(tasks, interval):
+    """Сегменты (начало, конец, имя или None) на полуинтервале [0, interval)."""
+    ordered = rms_priorities(tasks)
+    if type(interval) is not int or not 0 < interval <= MAX_INTERVAL:
+        raise ValueError(f"Интервал моделирования должен быть от 1 до {MAX_INTERVAL} мс.")
+    queues = [[] for _ in ordered]
+    segments = []
+    for time in range(interval):
+        for priority, task in enumerate(ordered):
+            if time % task.T == 0:
+                queues[priority].append(task.C)
+        running = None
+        for priority, task in enumerate(ordered):
+            if queues[priority]:
+                running = task.name
+                queues[priority][0] -= 1
+                if queues[priority][0] == 0:
+                    queues[priority].pop(0)
+                break
+        if segments and segments[-1][2] == running:
+            start, _, name = segments[-1]
+            segments[-1] = (start, time + 1, name)
+        else:
+            segments.append((time, time + 1, running))
+    return segments
