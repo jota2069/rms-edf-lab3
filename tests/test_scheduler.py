@@ -90,3 +90,93 @@ def test_hyperperiod(tasks):
     assert hyperperiod(tasks) == 20
     assert hyperperiod([Task("А", 1, 6, 6), Task("Б", 1, 8, 8)]) == 24
     assert hyperperiod([Task("А", 1, 7, 7)]) == 7
+
+
+def test_load_json(tasks):
+    assert tasks == [Task("Управление", 2, 5, 5), Task("Датчики", 2, 10, 10), Task("Связь", 3, 20, 20)]
+
+
+def test_priorities(tasks):
+    unsorted = [tasks[2], tasks[0], tasks[1]]
+    assert rms_priorities(unsorted) == tasks
+    assert unsorted == [tasks[2], tasks[0], tasks[1]]
+    first, second = Task("Б", 1, 5, 5), Task("А", 1, 5, 5)
+    assert rms_priorities([first, second]) == [first, second]
+    assert gantt([first, second], 2) == [(0, 1, "Б"), (1, 2, "А")]
+
+
+def test_variant_schedule(tasks):
+    assert gantt(list(reversed(tasks)), 20) == [
+        (0, 2, "Управление"), (2, 4, "Датчики"), (4, 5, "Связь"),
+        (5, 7, "Управление"), (7, 9, "Связь"), (9, 10, None),
+        (10, 12, "Управление"), (12, 14, "Датчики"), (14, 15, None),
+        (15, 17, "Управление"), (17, 20, None),
+    ]
+
+
+def test_preemption():
+    tasks = [Task("Связь", 4, 10, 10), Task("Управление", 1, 3, 3)]
+    assert gantt(tasks, 7) == [
+        (0, 1, "Управление"), (1, 3, "Связь"), (3, 4, "Управление"),
+        (4, 6, "Связь"), (6, 7, "Управление")]
+
+
+def test_idle_and_boundary():
+    tasks = [Task("А", 1, 3, 3)]
+    assert gantt(tasks, 1) == [(0, 1, "А")]
+    assert gantt(tasks, 3) == [(0, 1, "А"), (1, 3, None)]
+    assert gantt(tasks, 4) == [(0, 1, "А"), (1, 3, None), (3, 4, "А")]
+
+
+def test_queued_jobs():
+    # В t=7 новое поступление не должно стереть остаток предыдущего.
+    assert gantt([Task("А", 2, 5, 5), Task("Б", 4, 7, 7)], 14) == [
+        (0, 2, "А"), (2, 5, "Б"), (5, 7, "А"), (7, 10, "Б"),
+        (10, 12, "А"), (12, 14, "Б")]
+    assert gantt([Task("А", 4, 3, 3)], 10) == [(0, 10, "А")]
+
+
+def test_invalid_interval(tasks, monkeypatch):
+    for interval in (0, -1, 2.5, True, 100001):
+        with pytest.raises(ValueError, match="Интервал"):
+            gantt(tasks, interval)
+    monkeypatch.setattr(scheduler, "MAX_INTERVAL", 4)
+    assert gantt([Task("А", 1, 3, 3)], 4) == [(0, 1, "А"), (1, 3, None), (3, 4, "А")]
+    with pytest.raises(ValueError):
+        gantt(tasks, 5)
+
+
+def test_invalid_task():
+    for field in ("C", "T", "D"):
+        for value in (0, -1, 1.5, True, "2", None):
+            values = {"name": "А", "C": 1, "T": 5, "D": 5}
+            values[field] = value
+            with pytest.raises(ValueError, match=field):
+                Task(**values)
+    for name in ("", "  ", 3, None):
+        with pytest.raises(ValueError, match="Имя"):
+            Task(name, 1, 5, 5)
+
+
+def test_invalid_json(tmp_path):
+    path = tmp_path / "tasks.json"
+    cases = ["{", "[]", "{}", "null", '[{"name":"А","C":1,"T":5}]',
+             '[{"name":"А","C":1,"T":5,"D":5,"extra":1}]', '[1]',
+             '[{"name":"А","C":true,"T":5,"D":5}]',
+             '[{"name":"А","C":1,"T":5,"D":5},{"name":"А","C":1,"T":5,"D":5}]']
+    for data in cases:
+        path.write_text(data, encoding="utf-8")
+        with pytest.raises(ValueError):
+            load_tasks(path)
+    path.write_bytes(b"\xff")
+    with pytest.raises(ValueError, match="кодировку"):
+        load_tasks(path)
+    with pytest.raises(ValueError, match="открыть файл"):
+        load_tasks(tmp_path / "missing.json")
+
+
+def test_invalid_collections():
+    for function in (utilization, rms_priorities, rms_schedulable, edf_schedulable, hyperperiod):
+        for tasks in ([], [1]):
+            with pytest.raises(ValueError):
+                function(tasks)
