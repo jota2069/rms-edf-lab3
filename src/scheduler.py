@@ -85,7 +85,13 @@ def response_time(task, higher):
     """Возвращает (оценка, стабилизировалась). B=0, независимые задачи, D<=T."""
     higher = list(higher)
     validate_tasks([task] + higher)
+    if task.D > task.T or any(other.D > other.T for other in higher):
+        raise ValueError("Для RTA при D > T нужен анализ нескольких активаций.")
+    if any(other.T > task.T for other in higher):
+        raise ValueError("Список higher не соответствует приоритетам RMS.")
     estimate = task.C
+    if estimate > task.D:
+        return estimate, False
     for _ in range(MAX_ITERATIONS):
         # Целочисленное округление вверх не теряет точность на больших числах.
         next_estimate = task.C + sum(
@@ -93,5 +99,7 @@ def response_time(task, higher):
         )
         if next_estimate == estimate:
             return estimate, True
+        if next_estimate > task.D:
+            return next_estimate, False
         estimate = next_estimate
     raise ValueError("RTA: достигнут предел итераций, результат не определён.")
